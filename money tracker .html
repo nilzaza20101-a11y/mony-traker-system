@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบบันทึกรายรับ-รายจ่าย (Expense Tracker)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+    * { font-family: 'Prompt', sans-serif; }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(229, 231, 235, 0.8);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 pb-12">
+
+  <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2"></div>
+
+  <header class="bg-indigo-600 text-white shadow-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl font-bold">
+          <i class="fa-solid me-0.5 fa-wallet"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold leading-none">Expense Master</h1>
+          <span class="text-xs text-indigo-200">ระบบบันทึกรายรับ-รายจ่าย</span>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-2">
+        <button onclick="openApiModal()" class="p-2.5 rounded-lg bg-indigo-700 hover:bg-indigo-800 transition text-xs flex items-center gap-1.5" title="ตั้งค่าการเชื่อมต่อ">
+          <i class="fa-solid fa-gear"></i>
+          <span class="hidden sm:inline">ตั้งค่า API</span>
+        </button>
+        <button onclick="fetchInitialData()" class="p-2.5 rounded-lg bg-indigo-700 hover:bg-indigo-800 transition text-xs flex items-center gap-1.5">
+          <i class="fa-solid fa-rotate"></i>
+          <span class="hidden sm:inline">ดึงข้อมูลใหม่</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <section class="lg:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="glass-card p-5 rounded-2xl shadow-sm border-l-4 border-emerald-500 flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-500">รายรับรวมทั้งหมด</p>
+          <h3 id="kpi-income" class="text-2xl font-bold text-emerald-600 mt-1">฿0.00</h3>
+        </div>
+        <div class="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-arrow-trend-up"></i>
+        </div>
+      </div>
+
+      <div class="glass-card p-5 rounded-2xl shadow-sm border-l-4 border-rose-500 flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-500">รายจ่ายรวมทั้งหมด</p>
+          <h3 id="kpi-expense" class="text-2xl font-bold text-rose-600 mt-1">฿0.00</h3>
+        </div>
+        <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-arrow-trend-down"></i>
+        </div>
+      </div>
+
+      <div class="glass-card p-5 rounded-2xl shadow-sm border-l-4 border-indigo-500 flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-500">คงเหลือสุทธิ</p>
+          <h3 id="kpi-balance" class="text-2xl font-bold text-indigo-600 mt-1">฿0.00</h3>
+        </div>
+        <div class="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-scale-balanced"></i>
+        </div>
+      </div>
+    </section>
+
+    <section class="lg:col-span-5">
+      <div class="glass-card p-6 rounded-2xl shadow-sm sticky top-24">
+        <h2 id="form-title" class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-circle-plus text-indigo-600"></i> บันทึกรายการใหม่
+        </h2>
+
+        <form id="txn-form" onsubmit="handleFormSubmit(event)">
+          <input type="hidden" id="txn-id" value="">
+
+          <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl mb-4">
+            <button type="button" onclick="setType('EXPENSE')" id="type-btn-EXPENSE" class="py-2 text-sm font-medium rounded-lg transition text-slate-600">รายจ่าย</button>
+            <button type="button" onclick="setType('INCOME')" id="type-btn-INCOME" class="py-2 text-sm font-medium rounded-lg transition text-slate-600">รายรับ</button>
+          </div>
+          <input type="hidden" id="txn-type" value="EXPENSE">
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">วัน-เวลา</label>
+              <input type="datetime-local" id="txn-datetime" required class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">จำนวนเงิน (บาท)</label>
+              <input type="number" step="0.01" min="0.01" id="txn-amount" placeholder="0.00" required class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700">
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">หมวดหมู่</label>
+            <select id="txn-category" required class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+              <option value="">-- เลือกหมวดหมู่ --</option>
+            </select>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">บันทึกเพิ่มเติม</label>
+            <input type="text" id="txn-note" placeholder="รายละเอียด เช่น ค่าอาหารกลางวัน" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+          </div>
+
+          <div class="mb-6">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">แนบสลิป/ใบเสร็จ (ไม่เกิน 2.5MB)</label>
+            <input type="file" id="txn-file" accept="image/*" onchange="handleFileSelect(event)" class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+            <div id="file-preview-container" class="mt-2 hidden">
+              <img id="file-preview" src="" class="h-20 rounded-lg object-cover border shadow-sm">
+            </div>
+          </div>
+
+          <div class="flex gap-2">
+            <button type="submit" id="submit-btn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition shadow-md flex items-center justify-center gap-2 text-sm">
+              <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูล
+            </button>
+            <button type="button" id="cancel-btn" onclick="resetForm()" class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-4 py-2.5 rounded-xl transition text-sm">
+              ยกเลิก
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="lg:col-span-7 flex flex-col gap-6">
+
+      <div class="glass-card p-6 rounded-2xl shadow-sm">
+        <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-chart-pie text-indigo-600"></i> สัดส่วนค่าใช้จ่าย (Expense Chart)
+        </h2>
+        <div class="h-64 flex items-center justify-center">
+          <canvas id="categoryChart"></canvas>
+        </div>
+      </div>
+
+      <div class="glass-card p-6 rounded-2xl shadow-sm">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+          <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-list-check text-indigo-600"></i> รายการล่าสุด
+          </h2>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+          <input type="date" id="filter-start" onchange="applyFilters()" class="px-2.5 py-1.5 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500">
+          <input type="date" id="filter-end" onchange="applyFilters()" class="px-2.5 py-1.5 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500">
+          <select id="filter-type" onchange="applyFilters()" class="px-2.5 py-1.5 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="">ทุกประเภทรายการ</option>
+            <option value="EXPENSE">เฉพาะ รายจ่าย</option>
+            <option value="INCOME">เฉพาะ รายรับ</option>
+          </select>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-100 text-slate-600 uppercase font-semibold">
+              <tr>
+                <th class="p-3 rounded-l-lg">วัน-เวลา</th>
+                <th class="p-3">หมวดหมู่/บันทึก</th>
+                <th class="p-3 text-right">จำนวนเงิน</th>
+                <th class="p-3 text-center rounded-r-lg">สลิป/จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="txn-table-body" class="divide-y divide-slate-100">
+              <tr>
+                <td colspan="4" class="p-6 text-center text-slate-400">กำลังโหลดข้อมูล...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="api-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="max-w-md w-full bg-white rounded-2xl p-6 shadow-2xl">
+      <div class="flex items-center gap-3 text-indigo-600 mb-3">
+        <i class="fa-solid fa-link text-2xl"></i>
+        <h3 class="text-lg font-bold text-slate-800">เชื่อมต่อ Google Apps Script</h3>
+      </div>
+      <p class="text-xs text-slate-500 mb-4">วาง Web App URL ที่ได้จากการกด Deploy (การปรับใช้) ใน Google Apps Script เพื่อเริ่มต้นใช้งาน</p>
+      <input type="text" id="api-url-input" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3 py-2.5 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 mb-4 font-mono">
+      <div class="flex gap-2">
+        <button onclick="saveApiUrl()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-xl text-xs transition">บันทึกการเชื่อมต่อ</button>
+        <button onclick="closeApiModal()" class="px-4 py-2 border rounded-xl text-xs text-slate-600 hover:bg-slate-100">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="receipt-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden" onclick="closeReceiptModal()">
+    <div class="max-w-lg w-full bg-white rounded-2xl overflow-hidden shadow-2xl" onclick="event.stopPropagation()">
+      <div class="p-3 bg-slate-100 flex justify-between items-center border-b">
+        <span class="text-xs font-bold text-slate-700">หลักฐานสลิป / ใบเสร็จ</span>
+        <button onclick="closeReceiptModal()" class="text-slate-500 hover:text-slate-700"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="p-4 flex items-center justify-center bg-slate-900 min-h-[300px]">
+        <img id="receipt-modal-img" src="" class="max-h-[70vh] object-contain rounded-lg shadow-md">
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let API_URL = localStorage.getItem('EXPENSE_TRACKER_API_URL') || '';
+
+    const STATE = {
+      categories: [],
+      transactions: [],
+      filteredTransactions: [],
+      currentType: 'EXPENSE',
+      selectedFileBase64: null,
+      selectedFileName: null,
+      chartInstance: null
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('txn-datetime').value = new Date().toISOString().slice(0, 16);
+      setType('EXPENSE');
+
+      if (!API_URL || !API_URL.startsWith('http')) {
+        openApiModal();
+      } else {
+        fetchInitialData();
+      }
+    });
+
+    function openApiModal() {
+      document.getElementById('api-url-input').value = API_URL;
+      document.getElementById('api-modal').classList.remove('hidden');
+    }
+
+    function closeApiModal() {
+      document.getElementById('api-modal').classList.add('hidden');
+    }
+
+    function saveApiUrl() {
+      const url = document.getElementById('api-url-input').value.trim();
+      if (!url || !url.startsWith('http')) {
+        showToast('กรุณากรอก Web App URL ให้ถูกต้อง', 'error');
+        return;
+      }
+      API_URL = url;
+      localStorage.setItem('EXPENSE_TRACKER_API_URL', url);
+      closeApiModal();
+      showToast('บันทึกการเชื่อมต่อเรียบร้อย', 'success');
+      fetchInitialData();
+    }
+
+    function setType(type) {
+      STATE.currentType = type;
+      document.getElementById('txn-type').value = type;
+
+      ['EXPENSE', 'INCOME'].forEach(t => {
+        const btn = document.getElementById(`type-btn-${t}`);
+        if (t === type) {
+          btn.className = 'py-2 text-sm font-semibold rounded-lg transition shadow-sm ' + 
+            (t === 'EXPENSE' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white');
+        } else {
+          btn.className = 'py-2 text-sm font-medium rounded-lg transition text-slate-600 hover:bg-slate-200';
+        }
+      });
+
+      populateCategoryDropdown();
+    }
+
+    function populateCategoryDropdown() {
+      const select = document.getElementById('txn-category');
+      select.innerHTML = '<option value="">-- เลือกหมวดหมู่ --</option>';
+
+      const currentTypeUpper = String(STATE.currentType || '').trim().toUpperCase();
+
+      const filtered = STATE.categories.filter(c => {
+        const catType = String(c.type || '').trim().toUpperCase();
+        return catType === currentTypeUpper || catType === 'BOTH' || catType === 'ALL' || !catType;
+      });
+
+      filtered.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = String(c.id).trim();
+        opt.textContent = `${c.icon ? c.icon + ' ' : ''}${c.name}`;
+        select.appendChild(opt);
+      });
+    }
+
+    async function fetchInitialData() {
+      if (!API_URL) {
+        openApiModal();
+        return;
+      }
+
+      try {
+        document.getElementById('txn-table-body').innerHTML = '<tr><td colspan="4" class="p-6 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i> กำลังโหลดข้อมูล...</td></tr>';
+        
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'getInitialData' })
+        });
+        const json = await res.json();
+
+        if (json.success) {
+          STATE.categories = json.data.categories || [];
+          STATE.transactions = json.data.transactions || [];
+          STATE.filteredTransactions = [...STATE.transactions];
+
+          populateCategoryDropdown();
+          renderUI();
+          showToast('โหลดข้อมูลสำเร็จ', 'success');
+        } else {
+          showToast(json.message || 'เกิดข้อผิดพลาดในการโหลดข้อมูล', 'error');
+        }
+      } catch (err) {
+        showToast('ไม่สามารถเชื่อมต่อ API ได้ ตรวจสอบ URL หรือสิทธิ์การเข้าถึง', 'error');
+        document.getElementById('txn-table-body').innerHTML = '<tr><td colspan="4" class="p-6 text-center text-rose-500 font-semibold">การเชื่อมต่อล้มเหลว กรุณาตรวจสอบ URL หรือสิทธิ์การเข้าถึง</td></tr>';
+      }
+    }
+
+    function renderUI() {
+      renderKPIs();
+      renderTable();
+      renderChart();
+    }
+
+    function renderKPIs() {
+      let income = 0, expense = 0;
+      STATE.filteredTransactions.forEach(t => {
+        const amt = Number(t.amount) || 0;
+        const type = String(t.type || '').trim().toUpperCase();
+        if (type === 'INCOME') income += amt;
+        if (type === 'EXPENSE') expense += amt;
+      });
+
+      document.getElementById('kpi-income').textContent = formatCurrency(income);
+      document.getElementById('kpi-expense').textContent = formatCurrency(expense);
+      document.getElementById('kpi-balance').textContent = formatCurrency(income - expense);
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('txn-table-body');
+      tbody.innerHTML = '';
+
+      if (STATE.filteredTransactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-slate-400">ไม่พบรายการข้อมูล</td></tr>';
+        return;
+      }
+
+      STATE.filteredTransactions.forEach(t => {
+        const category = STATE.categories.find(c => String(c.id).trim() === String(t.category_id).trim());
+        const categoryName = category ? category.name : (t.category_id || 'ทั่วไป');
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition border-b border-slate-100';
+
+        const type = String(t.type || '').trim().toUpperCase();
+        const isExpense = type === 'EXPENSE';
+        const isIncome = type === 'INCOME';
+        const amountClass = isExpense ? 'text-rose-600 font-bold' : 'text-emerald-600 font-bold';
+        const prefix = isExpense ? '-' : '+';
+
+        tr.innerHTML = `
+          <td class="p-3 text-slate-500 whitespace-nowrap">
+            ${new Date(t.datetime).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+          </td>
+          <td class="p-3">
+            <div class="font-medium text-slate-700">${escapeHTML(categoryName)}</div>
+            <div class="text-[10px] text-slate-400">${escapeHTML(t.note || '-')}</div>
+          </td>
+          <td class="p-3 text-right ${amountClass} whitespace-nowrap">
+            ${prefix}${formatCurrency(t.amount)}
+          </td>
+          <td class="p-3 text-center whitespace-nowrap">
+            <div class="flex items-center justify-center gap-2">
+              ${t.receipt_url ? `<button onclick="viewReceipt('${t.receipt_url}')" class="text-indigo-600 hover:text-indigo-800 text-xs"><i class="fa-solid fa-receipt"></i></button>` : ''}
+              <button onclick="editTransaction('${t.id}')" class="text-amber-500 hover:text-amber-700 text-xs"><i class="fa-solid fa-pen-to-square"></i></button>
+              <button onclick="deleteTransaction('${t.id}')" class="text-rose-500 hover:text-rose-700 text-xs"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderChart() {
+      const ctx = document.getElementById('categoryChart').getContext('2d');
+      if (STATE.chartInstance) STATE.chartInstance.destroy();
+
+      const expenseTxns = STATE.filteredTransactions.filter(t => String(t.type || '').trim().toUpperCase() === 'EXPENSE');
+      const catTotals = {};
+
+      expenseTxns.forEach(t => {
+        const cat = STATE.categories.find(c => String(c.id).trim() === String(t.category_id).trim());
+        const catName = cat ? cat.name : (t.category_id || 'อื่นๆ');
+        catTotals[catName] = (catTotals[catName] || 0) + Number(t.amount);
+      });
+
+      const labels = Object.keys(catTotals);
+      const data = Object.values(catTotals);
+
+      STATE.chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels.length ? labels : ['ไม่มีข้อมูล'],
+          datasets: [{
+            data: data.length ? data : [1],
+            backgroundColor: [
+              '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#64748B'
+            ]
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { family: 'Prompt', size: 11 } } }
+          }
+        }
+      });
+    }
+
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+
+      if (!API_URL) {
+        openApiModal();
+        return;
+      }
+
+      const id = document.getElementById('txn-id').value;
+      const submitBtn = document.getElementById('submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังบันทึก...';
+
+      const payload = {
+        action: id ? 'updateTransaction' : 'addTransaction',
+        data: {
+          id: id || undefined,
+          datetime: document.getElementById('txn-datetime').value,
+          type: STATE.currentType,
+          amount: parseFloat(document.getElementById('txn-amount').value),
+          category_id: document.getElementById('txn-category').value,
+          note: document.getElementById('txn-note').value,
+          fileBase64: STATE.selectedFileBase64,
+          fileName: STATE.selectedFileName
+        }
+      };
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+
+        if (json.success) {
+          showToast(json.message, 'success');
+          resetForm();
+          fetchInitialData();
+        } else {
+          showToast(json.message || 'บันทึกไม่สำเร็จ', 'error');
+        }
+      } catch (err) {
+        showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูล';
+      }
+    }
+
+    function editTransaction(id) {
+      const txn = STATE.transactions.find(t => String(t.id).trim() === String(id).trim());
+      if (!txn) return;
+
+      document.getElementById('txn-id').value = txn.id;
+      document.getElementById('txn-datetime').value = new Date(txn.datetime).toISOString().slice(0, 16);
+      document.getElementById('txn-amount').value = txn.amount;
+      document.getElementById('txn-note').value = txn.note || '';
+
+      setType(txn.type);
+      document.getElementById('txn-category').value = txn.category_id;
+
+      document.getElementById('form-title').innerHTML = '<i class="fa-solid fa-pen-to-square text-amber-500"></i> แก้ไขรายการ';
+      document.getElementById('cancel-btn').classList.remove('hidden');
+    }
+
+    async function deleteTransaction(id) {
+      if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้?')) return;
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'deleteTransaction', data: { id } })
+        });
+        const json = await res.json();
+
+        if (json.success) {
+          showToast(json.message, 'success');
+          fetchInitialData();
+        } else {
+          showToast(json.message, 'error');
+        }
+      } catch (err) {
+        showToast('ไม่สามารถลบรายการได้', 'error');
+      }
+    }
+
+    function resetForm() {
+      document.getElementById('txn-form').reset();
+      document.getElementById('txn-id').value = '';
+      document.getElementById('txn-datetime').value = new Date().toISOString().slice(0, 16);
+      STATE.selectedFileBase64 = null;
+      STATE.selectedFileName = null;
+      document.getElementById('file-preview-container').classList.add('hidden');
+      document.getElementById('form-title').innerHTML = '<i class="fa-solid fa-circle-plus text-indigo-600"></i> บันทึกรายการใหม่';
+      document.getElementById('cancel-btn').classList.add('hidden');
+      setType('EXPENSE');
+    }
+
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (file.size > 2.5 * 1024 * 1024) {
+        showToast('ขนาดไฟล์ต้องไม่เกิน 2.5MB', 'error');
+        e.target.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        STATE.selectedFileBase64 = evt.target.result;
+        STATE.selectedFileName = file.name;
+        document.getElementById('file-preview').src = evt.target.result;
+        document.getElementById('file-preview-container').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function applyFilters() {
+      const start = document.getElementById('filter-start').value;
+      const end = document.getElementById('filter-end').value;
+      const type = document.getElementById('filter-type').value;
+
+      STATE.filteredTransactions = STATE.transactions.filter(t => {
+        let match = true;
+        if (start && new Date(t.datetime) < new Date(start)) match = false;
+        if (end) {
+          const endDate = new Date(end);
+          endDate.setHours(23, 59, 59);
+          if (new Date(t.datetime) > endDate) match = false;
+        }
+        if (type && String(t.type || '').trim().toUpperCase() !== String(type).trim().toUpperCase()) match = false;
+        return match;
+      });
+
+      renderUI();
+    }
+
+    function viewReceipt(url) {
+      document.getElementById('receipt-modal-img').src = url;
+      document.getElementById('receipt-modal').classList.remove('hidden');
+    }
+    function closeReceiptModal() {
+      document.getElementById('receipt-modal').classList.add('hidden');
+    }
+
+    function formatCurrency(num) {
+      return '฿' + (Number(num) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function escapeHTML(str) {
+      return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const bg = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-slate-800';
+      toast.className = `${bg} text-white px-4 py-3 rounded-xl shadow-lg text-xs flex items-center gap-2 transition duration-300 transform translate-y-2`;
+      toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-info'}"></i> ${message}`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3500);
+    }
+  </script>
+</body>
+</html>
